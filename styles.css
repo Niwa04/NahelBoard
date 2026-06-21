@@ -73,6 +73,15 @@ button.ghost {
   border-color: #c8d0da;
 }
 
+button.install-button {
+  background: #18202a;
+  color: #fff;
+}
+
+button.install-button.is-ready {
+  background: #6f4bd8;
+}
+
 .shell {
   min-height: 100vh;
   padding: 24px;
@@ -217,15 +226,12 @@ h1 {
   font-weight: 800;
 }
 
-input[type="text"] {
+input[type="text"],
+input[type="url"] {
   border: 2px solid #c8d0da;
   border-radius: var(--radius);
   min-height: 44px;
   padding: 8px 10px;
-}
-
-input[type="file"] {
-  max-width: 100%;
 }
 
 .child-preview {

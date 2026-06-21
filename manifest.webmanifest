@@ -1,0 +1,19 @@
+{
+  "name": "Etats",
+  "short_name": "Etats",
+  "description": "Boards visuels pour aider un enfant a indiquer son etat.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#f7f3ea",
+  "theme_color": "#f7f3ea",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

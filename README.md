@@ -1,4 +1,4 @@
-# NahelBoard
+# Tableaux d'états
 
 Application statique pour créer des boards d'états visuels et les utiliser en mode enfant avec drag-and-drop.
 

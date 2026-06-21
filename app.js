@@ -1,5 +1,7 @@
-const STORAGE_KEY = "nahelboard.boards.v1";
+const STORAGE_KEY = "etatboards.boards.v1";
+const LEGACY_STORAGE_KEY = "nahelboard.boards.v1";
 const app = document.querySelector("#app");
+let deferredInstallPrompt = null;
 
 const starterIcons = [
   iconSvg("Toilette", "🚽", "#dbeafe"),
@@ -20,7 +22,8 @@ function uid() {
 
 function loadBoards() {
   try {
-    const boards = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    const storedValue = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || "[]";
+    const boards = JSON.parse(storedValue);
     if (Array.isArray(boards) && boards.length) return boards;
   } catch {
     localStorage.removeItem(STORAGE_KEY);
@@ -76,6 +79,17 @@ function routeTo(hash) {
 
 window.addEventListener("hashchange", render);
 window.addEventListener("storage", render);
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  renderInstallButtonState();
+});
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  renderInstallButtonState();
+});
+
+registerServiceWorker();
 
 function render() {
   const [view, id] = window.location.hash.replace("#", "").split("/");
@@ -90,13 +104,10 @@ function renderHome() {
     <main class="shell">
       <header class="topbar">
         <div class="brand">
-          <div class="brand-mark">N</div>
-          <div>
-            <h1>NahelBoard</h1>
-            <p class="subtitle">Créer, modifier et utiliser des tableaux d'états visuels.</p>
-          </div>
+          <div class="brand-mark" aria-hidden="true">✓</div>
         </div>
         <div class="actions">
+          ${installButton()}
           <button class="primary" data-action="new-board">+ Nouveau board</button>
         </div>
       </header>
@@ -107,6 +118,7 @@ function renderHome() {
   `;
 
   app.querySelector("[data-action='new-board']").addEventListener("click", createBoard);
+  bindInstallButtons();
   app.querySelectorAll("[data-edit]").forEach((button) => button.addEventListener("click", () => routeTo(`edit/${button.dataset.edit}`)));
   app.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => routeTo(`view/${button.dataset.view}`)));
   app.querySelectorAll("[data-copy]").forEach((button) => button.addEventListener("click", () => duplicateBoard(button.dataset.copy)));
@@ -205,6 +217,7 @@ function renderEditor(id) {
           </div>
         </div>
         <div class="actions">
+          ${installButton()}
           <button class="ghost" data-action="home">Accueil</button>
           <button class="green" data-action="view">Utiliser</button>
         </div>
@@ -220,11 +233,11 @@ function renderEditor(id) {
             <input id="child-name" type="text" value="${escapeHtml(board.childName || "")}">
           </div>
           <div class="field">
-            <label for="child-image">Photo de l'enfant</label>
+            <label for="child-image-url">URL de la photo de l'enfant</label>
             <div class="child-preview">
               ${board.childImage ? `<img src="${board.childImage}" alt="">` : `<span>Photo</span>`}
             </div>
-            <input id="child-image" type="file" accept="image/*">
+            <input id="child-image-url" type="url" inputmode="url" placeholder="https://..." value="${escapeHtml(board.childImage || "")}">
           </div>
           <button class="primary" data-action="add-task">+ Ajouter un état</button>
         </aside>
@@ -238,6 +251,7 @@ function renderEditor(id) {
     </main>
   `;
 
+  bindInstallButtons();
   app.querySelector("[data-action='home']").addEventListener("click", () => routeTo(""));
   app.querySelector("[data-action='view']").addEventListener("click", () => routeTo(`view/${board.id}`));
   app.querySelector("[data-action='add-task']").addEventListener("click", () => {
@@ -256,10 +270,8 @@ function renderEditor(id) {
     setBoard(board);
   });
 
-  app.querySelector("#child-image").addEventListener("change", async (event) => {
-    const image = await readImage(event.target.files[0]);
-    if (!image) return;
-    board.childImage = image;
+  app.querySelector("#child-image-url").addEventListener("change", (event) => {
+    board.childImage = event.target.value.trim();
     setBoard(board);
     renderEditor(board.id);
   });
@@ -273,12 +285,11 @@ function renderEditor(id) {
     });
   });
 
-  app.querySelectorAll("[data-task-image]").forEach((input) => {
-    input.addEventListener("change", async () => {
-      const task = board.tasks.find((item) => item.id === input.dataset.taskImage);
-      const image = await readImage(input.files[0]);
-      if (!task || !image) return;
-      task.image = image;
+  app.querySelectorAll("[data-task-image-url]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const task = board.tasks.find((item) => item.id === input.dataset.taskImageUrl);
+      if (!task) return;
+      task.image = input.value.trim();
       setBoard(board);
       renderEditor(board.id);
     });
@@ -311,8 +322,8 @@ function taskEditor(task, index) {
           <input id="task-${task.id}" data-task-title="${task.id}" type="text" value="${escapeHtml(task.title)}">
         </div>
         <div class="field">
-          <label for="image-${task.id}">Image</label>
-          <input id="image-${task.id}" data-task-image="${task.id}" type="file" accept="image/*">
+          <label for="image-${task.id}">URL de l'image</label>
+          <input id="image-${task.id}" data-task-image-url="${task.id}" type="url" inputmode="url" placeholder="https://..." value="${escapeHtml(task.image || "")}">
         </div>
       </div>
       <div class="actions">
@@ -333,16 +344,6 @@ function moveTask(board, taskId, direction) {
   setBoard(board);
 }
 
-function readImage(file) {
-  if (!file) return Promise.resolve("");
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 function renderChildView(id) {
   const board = getBoard(id);
   if (!board) return routeTo("");
@@ -356,6 +357,7 @@ function renderChildView(id) {
           <span></span>
           <h1>${escapeHtml(board.title)}</h1>
           <div class="actions">
+            ${installButton()}
             <button class="ghost" data-action="edit">Modifier</button>
             <button class="ghost" data-action="home">Accueil</button>
           </div>
@@ -378,6 +380,7 @@ function renderChildView(id) {
     </main>
   `;
 
+  bindInstallButtons();
   app.querySelector("[data-action='edit']").addEventListener("click", () => routeTo(`edit/${board.id}`));
   app.querySelector("[data-action='home']").addEventListener("click", () => routeTo(""));
   enableChildDrag(board);
@@ -468,6 +471,65 @@ async function requestLandscape() {
   } catch {
     // Browsers often allow orientation lock only after fullscreen/user gesture.
   }
+}
+
+function installButton() {
+  if (isStandaloneApp()) return "";
+  return `<button class="install-button" data-action="install-app">Installer l'app</button>`;
+}
+
+function bindInstallButtons() {
+  app.querySelectorAll("[data-action='install-app']").forEach((button) => {
+    button.disabled = false;
+    button.addEventListener("click", installApp);
+  });
+  renderInstallButtonState();
+}
+
+function renderInstallButtonState() {
+  app.querySelectorAll("[data-action='install-app']").forEach((button) => {
+    if (isStandaloneApp()) {
+      button.remove();
+      return;
+    }
+    button.classList.toggle("is-ready", Boolean(deferredInstallPrompt));
+  });
+}
+
+async function installApp() {
+  await enterFullscreenForOrientation();
+  await requestLandscape();
+
+  if (!deferredInstallPrompt) {
+    alert("Si le bouton d'installation du navigateur n'apparait pas encore, utilise le menu du navigateur puis Ajouter a l'ecran d'accueil.");
+    return;
+  }
+
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  renderInstallButtonState();
+}
+
+async function enterFullscreenForOrientation() {
+  try {
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      await document.documentElement.requestFullscreen();
+    }
+  } catch {
+    // Fullscreen is optional and browser-dependent.
+  }
+}
+
+function isStandaloneApp() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("service-worker.js").catch(() => {});
+  });
 }
 
 render();
