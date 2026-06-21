@@ -1,5 +1,5 @@
-import { getDatabase } from "@netlify/database";
 import type { Config, Context } from "@netlify/functions";
+import { getAppDatabase } from "./_shared/db.mts";
 import { getSessionUser } from "./_shared/auth.mts";
 
 const MAX_CHILD_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -17,7 +17,7 @@ export default async (req: Request, _context: Context) => {
   }
 
   const url = new URL(req.url);
-  const db = getDatabase();
+  const db = getAppDatabase();
 
   if (url.pathname.endsWith("/image")) {
     if (req.method === "GET") {

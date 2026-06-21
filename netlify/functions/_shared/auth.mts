@@ -1,5 +1,5 @@
 import { randomBytes, pbkdf2Sync, timingSafeEqual, createHash } from "node:crypto";
-import { getDatabase } from "@netlify/database";
+import { getAppDatabase } from "./db.mts";
 
 const SESSION_COOKIE = "etat_session";
 const PASSWORD_ITERATIONS = 120000;
@@ -32,7 +32,7 @@ export function validatePassword(value: unknown) {
 }
 
 export async function createUser(pseudo: string, password: string) {
-  const db = getDatabase();
+  const db = getAppDatabase();
   const existing = await db.sql`SELECT id FROM users WHERE pseudo = ${pseudo} LIMIT 1`;
 
   if (existing.length) {
@@ -56,7 +56,7 @@ export async function createUser(pseudo: string, password: string) {
 }
 
 export async function verifyUser(pseudo: string, password: string) {
-  const db = getDatabase();
+  const db = getAppDatabase();
   const rows = await db.sql`
     SELECT id, pseudo, password_hash, salt, created_at
     FROM users
@@ -81,7 +81,7 @@ export async function verifyUser(pseudo: string, password: string) {
 
 export async function createSession(user: SessionUser) {
   const token = randomBytes(32).toString("hex");
-  const db = getDatabase();
+  const db = getAppDatabase();
   await db.sql`
     INSERT INTO sessions (token_hash, user_id, created_at)
     VALUES (${sessionKey(token)}, ${user.id}, ${new Date().toISOString()})
@@ -93,7 +93,7 @@ export async function getSessionUser(req: Request) {
   const token = readCookie(req, SESSION_COOKIE);
   if (!token) return null;
 
-  const db = getDatabase();
+  const db = getAppDatabase();
   const rows = await db.sql`
     SELECT users.id, users.pseudo
     FROM sessions
@@ -108,7 +108,7 @@ export async function deleteSession(req: Request) {
   const token = readCookie(req, SESSION_COOKIE);
   if (!token) return;
 
-  const db = getDatabase();
+  const db = getAppDatabase();
   await db.sql`DELETE FROM sessions WHERE token_hash = ${sessionKey(token)}`;
 }
 

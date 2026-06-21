@@ -1,5 +1,5 @@
-import { getDatabase } from "@netlify/database";
 import type { Config, Context } from "@netlify/functions";
+import { getAppDatabase } from "./_shared/db.mts";
 import { getSessionUser } from "./_shared/auth.mts";
 
 const jsonHeaders = {
@@ -14,7 +14,7 @@ export default async (req: Request, _context: Context) => {
     return Response.json({ error: "Unauthorized" }, { status: 401, headers: jsonHeaders });
   }
 
-  const db = getDatabase();
+  const db = getAppDatabase();
 
   if (req.method === "GET") {
     const rows = await db.sql`

@@ -11,6 +11,8 @@ Le fichier `netlify.toml` contient déjà la configuration minimale.
 
 Les comptes utilisateur fonctionnent avec pseudo + mot de passe via Netlify Functions et Netlify Database. Une fois connecté, les boards sont sauvegardés dans des tables Postgres Netlify par utilisateur.
 
+Si une URL Postgres explicite est fournie, l'ajouter dans Netlify comme variable d'environnement `NETLIFY_DATABASE_URL`. Le code l'utilise automatiquement, sans stocker le secret dans le repo.
+
 ## Local
 
 Lancer avec Node:
