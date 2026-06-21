@@ -1,6 +1,6 @@
-import { getStore } from "@netlify/blobs";
-import { getUser } from "@netlify/identity";
+import { getDatabase } from "@netlify/database";
 import type { Config, Context } from "@netlify/functions";
+import { getSessionUser } from "./_shared/auth.mts";
 
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
@@ -8,18 +8,22 @@ const jsonHeaders = {
 };
 
 export default async (req: Request, _context: Context) => {
-  const user = await getUser();
+  const user = await getSessionUser(req);
 
   if (!user?.id) {
     return Response.json({ error: "Unauthorized" }, { status: 401, headers: jsonHeaders });
   }
 
-  const store = getStore({ name: "boards", consistency: "strong" });
-  const key = `users/${user.id}/boards.json`;
+  const db = getDatabase();
 
   if (req.method === "GET") {
-    const data = await store.get(key, { type: "json" });
-    return Response.json({ boards: Array.isArray(data) ? data : [] }, { headers: jsonHeaders });
+    const rows = await db.sql`
+      SELECT data
+      FROM boards
+      WHERE user_id = ${user.id}
+      ORDER BY sort_order ASC, updated_at DESC
+    `;
+    return Response.json({ boards: rows.map((row) => row.data) }, { headers: jsonHeaders });
   }
 
   if (req.method === "POST") {
@@ -28,7 +32,26 @@ export default async (req: Request, _context: Context) => {
       return Response.json({ error: "Invalid boards payload" }, { status: 400, headers: jsonHeaders });
     }
 
-    await store.setJSON(key, body.boards);
+    const client = await db.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("DELETE FROM boards WHERE user_id = $1", [user.id]);
+
+      for (const [index, board] of body.boards.entries()) {
+        await client.query(
+          `INSERT INTO boards (id, user_id, title, data, sort_order, updated_at)
+           VALUES ($1, $2, $3, $4, $5, NOW())`,
+          [board.id, user.id, board.title || "Board sans nom", board, index],
+        );
+      }
+
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
     return Response.json({ ok: true }, { headers: jsonHeaders });
   }
 

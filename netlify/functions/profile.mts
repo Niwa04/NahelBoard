@@ -1,6 +1,6 @@
-import { getStore } from "@netlify/blobs";
-import { getUser } from "@netlify/identity";
+import { getDatabase } from "@netlify/database";
 import type { Config, Context } from "@netlify/functions";
+import { getSessionUser } from "./_shared/auth.mts";
 
 const MAX_CHILD_IMAGE_BYTES = 2 * 1024 * 1024;
 
@@ -10,28 +10,30 @@ const jsonHeaders = {
 };
 
 export default async (req: Request, _context: Context) => {
-  const user = await getUser();
+  const user = await getSessionUser(req);
 
   if (!user?.id) {
     return Response.json({ error: "Unauthorized" }, { status: 401, headers: jsonHeaders });
   }
 
   const url = new URL(req.url);
-  const store = getStore({ name: "profiles", consistency: "strong" });
-  const profileKey = `users/${user.id}/profile.json`;
-  const imageKey = `users/${user.id}/child-image`;
+  const db = getDatabase();
 
   if (url.pathname.endsWith("/image")) {
     if (req.method === "GET") {
-      const [image, metadata] = await Promise.all([
-        store.get(imageKey, { type: "arrayBuffer" }),
-        store.getMetadata(imageKey),
-      ]);
-      if (!image) return new Response("Not found", { status: 404 });
+      const rows = await db.sql`
+        SELECT child_image_data, child_image_content_type
+        FROM profiles
+        WHERE user_id = ${user.id}
+        LIMIT 1
+      `;
+      const row = rows[0];
+      if (!row?.child_image_data) return new Response("Not found", { status: 404 });
 
-      return new Response(image, {
+      const base64 = String(row.child_image_data).split(",").pop() || "";
+      return new Response(Buffer.from(base64, "base64"), {
         headers: {
-          "Content-Type": String(metadata?.metadata?.contentType || "image/jpeg"),
+          "Content-Type": String(row.child_image_content_type || "image/jpeg"),
           "Cache-Control": "private, max-age=60",
         },
       });
@@ -48,21 +50,30 @@ export default async (req: Request, _context: Context) => {
         return Response.json({ error: "Image must be 2 MB or smaller" }, { status: 413, headers: jsonHeaders });
       }
 
-      await store.set(imageKey, bytes, {
-        metadata: {
-          contentType,
-          updatedAt: new Date().toISOString(),
-        },
-      });
+      const dataUrl = `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`;
 
       const profile = { childImage: `/api/profile/image?v=${Date.now()}` };
-      await store.setJSON(profileKey, profile);
+      await db.sql`
+        INSERT INTO profiles (user_id, child_image_data, child_image_content_type, updated_at)
+        VALUES (${user.id}, ${dataUrl}, ${contentType}, NOW())
+        ON CONFLICT (user_id)
+        DO UPDATE SET
+          child_image_data = EXCLUDED.child_image_data,
+          child_image_content_type = EXCLUDED.child_image_content_type,
+          updated_at = NOW()
+      `;
       return Response.json({ profile }, { headers: jsonHeaders });
     }
   }
 
   if (req.method === "GET") {
-    const profile = (await store.get(profileKey, { type: "json" })) || {};
+    const rows = await db.sql`
+      SELECT child_image_data
+      FROM profiles
+      WHERE user_id = ${user.id}
+      LIMIT 1
+    `;
+    const profile = rows[0]?.child_image_data ? { childImage: `/api/profile/image?v=${Date.now()}` } : {};
     return Response.json({ profile }, { headers: jsonHeaders });
   }
 

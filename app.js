@@ -7,7 +7,6 @@ let deferredInstallPrompt = null;
 let boardsCache = [];
 let userProfile = { childImage: "" };
 let currentUser = null;
-let authApi = null;
 let authReady = false;
 let statusMessage = "";
 
@@ -647,32 +646,35 @@ async function initApp() {
 async function initAuth() {
   authReady = false;
 
-  if (!canUseNetlifyIdentity()) {
+  if (!canUseOnlineAuth()) {
     statusMessage = "Mode local: connecte l'app sur Netlify pour synchroniser les boards en ligne.";
     authReady = true;
     return;
   }
 
   try {
-    authApi = await import("https://esm.sh/@netlify/identity");
-    await authApi.handleAuthCallback?.();
-    currentUser = await authApi.getUser();
-
-    authApi.onAuthChange?.((_event, user) => {
-      currentUser = user;
-      loadBoardsForCurrentUser();
-    });
-
+    currentUser = await fetchCurrentUser();
     await loadBoardsForCurrentUser();
   } catch {
-    statusMessage = "Connexion indisponible: verifie que Netlify Identity est active sur le site.";
+    statusMessage = "Connexion indisponible: verifie que le site Netlify est deploye.";
   } finally {
     authReady = true;
   }
 }
 
-function canUseNetlifyIdentity() {
+function canUseOnlineAuth() {
   return location.protocol === "https:" && !["localhost", "127.0.0.1"].includes(location.hostname);
+}
+
+async function fetchCurrentUser() {
+  const response = await fetch("/api/auth/me", {
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) return null;
+
+  const data = await response.json();
+  return data.user || null;
 }
 
 async function loadBoardsForCurrentUser() {
@@ -704,7 +706,7 @@ async function loadBoardsForCurrentUser() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudBoards));
     }
 
-    statusMessage = `Connecte: ${currentUser.email || "compte utilisateur"} - sauvegarde en ligne active.`;
+    statusMessage = `Connecte: ${currentUser.pseudo || "compte utilisateur"} - sauvegarde en ligne active.`;
   } catch {
     boardsCache = loadLocalBoards();
     statusMessage = "Connexion au stockage en ligne impossible. Les changements restent locaux pour le moment.";
@@ -755,7 +757,7 @@ async function syncCloudBoards(boards, force = false) {
     });
 
     if (!response.ok) throw new Error("Cloud boards save failed");
-    statusMessage = `Connecte: ${currentUser.email || "compte utilisateur"} - sauvegarde en ligne active.`;
+    statusMessage = `Connecte: ${currentUser.pseudo || "compte utilisateur"} - sauvegarde en ligne active.`;
   } catch {
     statusMessage = "Sauvegarde en ligne impossible. Reessaie quand la connexion est revenue.";
   }
@@ -829,7 +831,7 @@ function authControls() {
   if (!authReady) return `<span class="auth-note">Connexion...</span>`;
   if (currentUser) {
     return `
-      <span class="auth-note">${escapeHtml(currentUser.email || "Connecte")}</span>
+      <span class="auth-note">${escapeHtml(currentUser.pseudo || "Connecte")}</span>
       <button class="ghost" data-action="logout">Deconnexion</button>
     `;
   }
@@ -858,10 +860,10 @@ function statusBanner() {
 }
 
 function showAuthDialog(mode) {
-  if (!authApi) {
+  if (!canUseOnlineAuth()) {
     showInlineDialog(
       "Compte utilisateur",
-      "Les comptes fonctionnent apres deploiement Netlify avec Identity active. En local, les boards restent sur cet appareil."
+      "Les comptes fonctionnent apres deploiement Netlify. En local, les boards restent sur cet appareil."
     );
     return;
   }
@@ -872,8 +874,8 @@ function showAuthDialog(mode) {
       <form class="install-help-panel auth-form" data-auth-form>
         <h2>${title}</h2>
         <label>
-          Email
-          <input name="email" type="email" autocomplete="email" required>
+          Pseudo
+          <input name="pseudo" type="text" autocomplete="username" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_-]+">
         </label>
         <label>
           Mot de passe
@@ -894,20 +896,15 @@ function showAuthDialog(mode) {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const formData = new FormData(form);
-    const email = String(formData.get("email") || "").trim();
+    const pseudo = String(formData.get("pseudo") || "").trim();
     const password = String(formData.get("password") || "");
     const error = form.querySelector("[data-auth-error]");
 
     try {
-      if (mode === "signup") {
-        currentUser = await authApi.signup(email, password);
-        statusMessage = currentUser.emailVerified
-          ? "Compte cree. Sauvegarde en ligne active."
-          : "Compte cree. Confirme l'email avant de te connecter.";
-      } else {
-        currentUser = await authApi.login(email, password);
-        statusMessage = "Connecte. Sauvegarde en ligne active.";
-      }
+      currentUser = await submitAuth(mode, pseudo, password);
+      statusMessage = mode === "signup"
+        ? "Compte cree. Sauvegarde en ligne active."
+        : "Connecte. Sauvegarde en ligne active.";
       dialog.remove();
       await loadBoardsForCurrentUser();
     } catch (errorValue) {
@@ -918,13 +915,36 @@ function showAuthDialog(mode) {
 
 async function logoutUser() {
   try {
-    await authApi?.logout();
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
   } finally {
     currentUser = null;
     boardsCache = loadLocalBoards();
     statusMessage = "Deconnecte. Les changements restent locaux.";
     render();
   }
+}
+
+async function submitAuth(mode, pseudo, password) {
+  const response = await fetch(`/api/auth/${mode}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ pseudo, password }),
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.error || "Connexion impossible.");
+  }
+
+  return data.user;
 }
 
 function showInlineDialog(title, message) {
