@@ -29,7 +29,7 @@ export default async (req: Request, _context: Context) => {
     await deleteSession(req);
     return Response.json(
       { ok: true },
-      { headers: { ...jsonHeaders, "Set-Cookie": expiredSessionCookie() } },
+      { headers: { ...jsonHeaders, "Set-Cookie": expiredSessionCookie(req) } },
     );
   }
 
@@ -54,7 +54,7 @@ export default async (req: Request, _context: Context) => {
 
       return Response.json(
         { user },
-        { headers: { ...jsonHeaders, "Set-Cookie": sessionCookie(token) } },
+        { headers: { ...jsonHeaders, "Set-Cookie": sessionCookie(req, token) } },
       );
     } catch (error) {
       return Response.json({ error: error instanceof Error ? error.message : "Connexion impossible." }, { status: 400, headers: jsonHeaders });

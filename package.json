@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "dev": "netlify dev",
     "start": "node local-server.js"
   },
   "dependencies": {

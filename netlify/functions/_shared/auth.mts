@@ -112,12 +112,12 @@ export async function deleteSession(req: Request) {
   await db.sql`DELETE FROM sessions WHERE token_hash = ${sessionKey(token)}`;
 }
 
-export function sessionCookie(token: string) {
-  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_MAX_AGE_SECONDS}`;
+export function sessionCookie(req: Request, token: string) {
+  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly;${secureCookiePart(req)} SameSite=Lax; Max-Age=${SESSION_MAX_AGE_SECONDS}`;
 }
 
-export function expiredSessionCookie() {
-  return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+export function expiredSessionCookie(req: Request) {
+  return `${SESSION_COOKIE}=; Path=/; HttpOnly;${secureCookiePart(req)} SameSite=Lax; Max-Age=0`;
 }
 
 function hashPassword(password: string, salt: string) {
@@ -145,4 +145,9 @@ function readCookie(req: Request, name: string) {
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${name}=`))
     ?.slice(name.length + 1) || "";
+}
+
+function secureCookiePart(req: Request) {
+  const url = new URL(req.url);
+  return url.protocol === "https:" ? " Secure;" : "";
 }

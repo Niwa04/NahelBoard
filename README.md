@@ -13,6 +13,12 @@ Les comptes utilisateur fonctionnent avec pseudo + mot de passe via Netlify Func
 
 Si une URL Postgres explicite est fournie, l'ajouter dans Netlify comme variable d'environnement `NETLIFY_DATABASE_URL`. Le code l'utilise automatiquement, sans stocker le secret dans le repo.
 
+Pour tester en local avec `netlify dev`, créer un fichier `.env` non committé:
+
+```bash
+NETLIFY_DATABASE_URL=postgresql://...
+```
+
 ## Local
 
 Lancer avec Node:

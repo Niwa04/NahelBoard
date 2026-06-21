@@ -422,20 +422,19 @@ function renderChildView(id) {
           <span></span>
           <h1>${escapeHtml(board.title)}</h1>
           <div class="actions">
-            ${authControls()}
-            ${installButton()}
-            <button class="ghost" data-action="edit">Modifier</button>
             <button class="ghost" data-action="home">Accueil</button>
           </div>
         </header>
         <div class="states-row">
           ${board.tasks.map((task) => stateColumn(board, task)).join("")}
         </div>
-        <div class="home-zone" data-drop-home>
-          <div class="drop-zone ${board.selectedTaskId ? "" : "is-home"}">
-            ${board.selectedTaskId ? "" : childToken(board)}
+        ${board.selectedTaskId ? "" : `
+          <div class="home-zone" data-drop-home>
+            <div class="drop-zone is-home">
+              ${childToken(board)}
+            </div>
           </div>
-        </div>
+        `}
       </section>
       <div class="portrait-warning">
         <div>
@@ -447,9 +446,6 @@ function renderChildView(id) {
     </main>
   `;
 
-  bindInstallButtons();
-  bindAuthControls();
-  app.querySelector("[data-action='edit']").addEventListener("click", () => routeTo(`edit/${board.id}`));
   app.querySelector("[data-action='home']").addEventListener("click", () => routeTo(""));
   enableChildDrag(board);
 }
@@ -498,7 +494,7 @@ function enableChildDrag(board) {
   token.addEventListener("pointermove", (event) => {
     if (!token.classList.contains("dragging")) return;
     moveToken(token, event.clientX, event.clientY, offsetX, offsetY);
-    markDropTarget(event.clientX, event.clientY);
+    markDropTarget(event.clientX, event.clientY, board);
   });
 
   token.addEventListener("pointerup", (event) => {
@@ -512,21 +508,39 @@ function enableChildDrag(board) {
     const target = document.elementFromPoint(event.clientX, event.clientY);
     const taskZone = target?.closest("[data-drop-task]");
     const homeZone = target?.closest("[data-drop-home]");
-    if (taskZone) board.selectedTaskId = taskZone.dataset.dropTask;
+    if (taskZone && canMoveToTask(board, taskZone.dataset.dropTask)) {
+      board.selectedTaskId = taskZone.dataset.dropTask;
+    }
     if (homeZone) board.selectedTaskId = "";
     setBoard(board);
     renderChildView(board.id);
   });
 }
 
+function canMoveToTask(board, targetTaskId) {
+  const targetIndex = board.tasks.findIndex((task) => task.id === targetTaskId);
+  if (targetIndex < 0) return false;
+
+  if (!board.selectedTaskId) {
+    return targetIndex === 0;
+  }
+
+  const currentIndex = board.tasks.findIndex((task) => task.id === board.selectedTaskId);
+  if (currentIndex < 0) return targetIndex === 0;
+
+  return Math.abs(targetIndex - currentIndex) <= 1;
+}
+
 function moveToken(token, clientX, clientY, offsetX, offsetY) {
   token.style.transform = `translate(${clientX - offsetX}px, ${clientY - offsetY}px)`;
 }
 
-function markDropTarget(clientX, clientY) {
+function markDropTarget(clientX, clientY, board) {
   clearDropMarks();
   const target = document.elementFromPoint(clientX, clientY);
   const zone = target?.closest(".drop-zone");
+  const taskZone = zone?.closest("[data-drop-task]");
+  if (taskZone && !canMoveToTask(board, taskZone.dataset.dropTask)) return;
   if (zone) zone.classList.add("is-over");
 }
 
@@ -663,7 +677,11 @@ async function initAuth() {
 }
 
 function canUseOnlineAuth() {
-  return location.protocol === "https:" && !["localhost", "127.0.0.1"].includes(location.hostname);
+  return location.protocol === "https:" || isNetlifyDev();
+}
+
+function isNetlifyDev() {
+  return ["localhost", "127.0.0.1"].includes(location.hostname) && location.port === "8888";
 }
 
 async function fetchCurrentUser() {
@@ -863,7 +881,7 @@ function showAuthDialog(mode) {
   if (!canUseOnlineAuth()) {
     showInlineDialog(
       "Compte utilisateur",
-      "Les comptes fonctionnent apres deploiement Netlify. En local, les boards restent sur cet appareil."
+      "Lance l'app avec npm run dev ou npx netlify-cli dev pour utiliser les comptes en local."
     );
     return;
   }
@@ -938,7 +956,14 @@ async function submitAuth(mode, pseudo, password) {
     },
     body: JSON.stringify({ pseudo, password }),
   });
-  const data = await response.json().catch(() => ({}));
+  const responseText = await response.text();
+  let data = {};
+
+  try {
+    data = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    data = { error: responseText };
+  }
 
   if (!response.ok) {
     throw new Error(data.error || "Connexion impossible.");

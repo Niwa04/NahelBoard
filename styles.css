@@ -448,7 +448,12 @@ input[type="file"] {
 }
 
 .child-token.fallback {
+  background: #fff;
+  border: 3px solid var(--line);
+  box-shadow: 0 10px 24px rgba(24, 32, 42, 0.22);
   font-size: 58px;
+  height: 110px;
+  width: 110px;
 }
 
 .child-token.dragging {

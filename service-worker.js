@@ -1,4 +1,4 @@
-const CACHE_NAME = "etatboards-v8";
+const CACHE_NAME = "etatboards-v14";
 const APP_SHELL = [
   "/",
   "/index.html",
