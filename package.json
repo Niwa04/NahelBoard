@@ -4,5 +4,10 @@
   "private": true,
   "scripts": {
     "start": "node local-server.js"
+  },
+  "dependencies": {
+    "@netlify/blobs": "latest",
+    "@netlify/functions": "latest",
+    "@netlify/identity": "latest"
   }
 }

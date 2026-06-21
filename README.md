@@ -9,6 +9,8 @@ Application statique pour créer des boards d'états visuels et les utiliser en 
 
 Le fichier `netlify.toml` contient déjà la configuration minimale.
 
+Activer aussi Netlify Identity dans le projet Netlify pour utiliser les comptes utilisateur. Une fois connecté, les boards sont sauvegardés en ligne par utilisateur via Netlify Functions et Netlify Blobs.
+
 ## Local
 
 Lancer avec Node:
