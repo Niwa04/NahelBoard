@@ -1,4 +1,4 @@
-const CACHE_NAME = "etatboards-v7";
+const CACHE_NAME = "etatboards-v8";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -29,6 +29,20 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
+  const url = new URL(event.request.url);
+  const isAppShell =
+    url.origin === location.origin &&
+    (url.pathname === "/" ||
+      url.pathname === "/index.html" ||
+      url.pathname.endsWith(".js") ||
+      url.pathname.endsWith(".css") ||
+      url.pathname.endsWith(".webmanifest"));
+
+  if (isAppShell) {
+    event.respondWith(networkFirst(event.request));
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
@@ -40,3 +54,17 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
+
+async function networkFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
+
+  try {
+    const response = await fetch(request, { cache: "no-store" });
+    await cache.put(request, response.clone());
+    return response;
+  } catch {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    return caches.match("/index.html");
+  }
+}
