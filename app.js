@@ -377,6 +377,7 @@ function renderChildView(id) {
           <p>Ce board est prévu en mode horizontal pour être plus facile à utiliser.</p>
         </div>
       </div>
+      ${installHelpDialog()}
     </main>
   `;
 
@@ -501,7 +502,7 @@ async function installApp() {
   await requestLandscape();
 
   if (!deferredInstallPrompt) {
-    alert("Si le bouton d'installation du navigateur n'apparait pas encore, utilise le menu du navigateur puis Ajouter a l'ecran d'accueil.");
+    showInstallHelp();
     return;
   }
 
@@ -530,6 +531,40 @@ function registerServiceWorker() {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("service-worker.js").catch(() => {});
   });
+}
+
+function installHelpDialog() {
+  return `
+    <div class="install-help" data-install-help hidden>
+      <div class="install-help-panel" role="dialog" aria-modal="true" aria-labelledby="install-help-title">
+        <h2 id="install-help-title">Installer l'app</h2>
+        <p>${installHelpText()}</p>
+        <button class="primary" data-action="close-install-help">OK</button>
+      </div>
+    </div>
+  `;
+}
+
+function installHelpText() {
+  if (isIos()) {
+    return "Sur iPhone ou iPad, appuie sur le bouton Partager du navigateur, puis choisis Ajouter a l'ecran d'accueil.";
+  }
+  return "Ouvre le menu du navigateur, puis choisis Installer l'application ou Ajouter a l'ecran d'accueil.";
+}
+
+function showInstallHelp() {
+  if (!app.querySelector("[data-install-help]")) {
+    document.body.insertAdjacentHTML("beforeend", installHelpDialog());
+  }
+  const dialog = document.querySelector("[data-install-help]");
+  dialog.hidden = false;
+  dialog.querySelector("[data-action='close-install-help']").addEventListener("click", () => {
+    dialog.hidden = true;
+  }, { once: true });
+}
+
+function isIos() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
 }
 
 render();

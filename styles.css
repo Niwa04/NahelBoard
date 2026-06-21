@@ -461,6 +461,36 @@ input[type="url"] {
   padding: 24px;
 }
 
+.install-help {
+  align-items: center;
+  background: rgba(24, 32, 42, 0.28);
+  display: grid;
+  inset: 0;
+  justify-items: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 200;
+}
+
+.install-help[hidden] {
+  display: none;
+}
+
+.install-help-panel {
+  background: #fff;
+  border: 3px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  max-width: 420px;
+  padding: 22px;
+  text-align: center;
+}
+
+.install-help-panel p {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 .sr-only {
   height: 1px;
   margin: -1px;
